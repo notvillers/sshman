@@ -19,6 +19,7 @@ path: str = os.path.abspath(os.path.dirname(__file__))
 data_path: str = os.path.join(path,
                               "data.json.enc")
 DEFAULT_DATA_DICT: dict = {"clients": []}
+DEFAULT_PORT: int = 22
 
 @dataclass
 class TerminalCode:
@@ -46,7 +47,7 @@ class SSHClient:
     host: str
     user: str
     password: str
-    port: int = 22
+    port: int = DEFAULT_PORT
 
     def connect(self) -> None:
         '''
@@ -294,7 +295,7 @@ def command_add(key = str) -> None:
                             "user": user,
                             "password": password,
                             "port": int(port) if port and isinstance(port, int) else 22})
-    save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+    save_and_encrypt_data(data = data,
                           file_path = data_path,
                           password = key)
     print("Client added successfully.")
@@ -322,13 +323,18 @@ def command_edit(commands: str,
             user: str = input(f"Enter user ({client.user}): ") or client.user
             password: str = getpass("Enter password: ") or client.password
             port: str = input(f"Enter port ({client.port}): ") or client.port
+            port_int: int = DEFAULT_PORT
+            try:
+                port_int = int(port)
+            except ValueError:
+                pass
             data: dict = read_encrypted_json(file_path = data_path,
                                             password = key)
             data["clients"][client_id_int - 1] = {"host": host,
                                                   "user": user,
                                                   "password": password,
-                                                  "port": int(port) if port and isinstance(port, int) else 22} # pylint: disable=line-too-long
-            save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+                                                  "port": port_int} # pylint: disable=line-too-long
+            save_and_encrypt_data(data = data,
                                   file_path = data_path,
                                   password = key)
             print("Client updated successfully.")
@@ -358,7 +364,7 @@ def command_remove(commands: str,
             confirm: str = input("Are you sure you want to remove this client? (y/N): ")
             if confirm.lower() == "y":
                 clients.pop(client_id_int - 1)
-                save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+                save_and_encrypt_data(data = data,
                                       file_path = data_path,
                                       password = key)
                 print("Client removed successfully.")
