@@ -2,6 +2,7 @@
     SSH Manager
 '''
 import os
+from sys import exit as sys_exit
 import base64
 import json
 from typing import Tuple
@@ -18,7 +19,6 @@ path: str = os.path.abspath(os.path.dirname(__file__))
 data_path: str = os.path.join(path,
                               "data.json.enc")
 DEFAULT_DATA_DICT: dict = {"clients": []}
-decrypt_key: str | None = None
 
 @dataclass
 class TerminalCode:
@@ -27,10 +27,19 @@ class TerminalCode:
     '''
     clear: str = "\033[H\033[J"
 
+
 term_code: TerminalCode = TerminalCode()
 
+
+def clear_terminal() -> None:
+    '''
+        Clears terminal
+    '''
+    print(term_code.clear)
+
+
 @dataclass
-class Client:
+class SSHClient:
     '''
         SSH Client dataclass
     '''
@@ -38,6 +47,20 @@ class Client:
     user: str
     password: str
     port: int = 22
+
+    def connect(self) -> None:
+        '''
+            Connect to SSH client
+        '''
+        try:
+            print(f"Connecting to {self.user}@{self.host}...")
+            run(f"sshpass -p {self.password} ssh -p {self.port} {self.user}@{self.host}", # pylint: disable=subprocess-run-check
+                shell = True)
+            print(f"Connection to {self.user}@{self.host} closed.")
+            sleep(2)
+        except Exception as e: # pylint: disable=broad-exception-caught
+            print(f"Error: {e}")
+            sleep(2)
 
 
 def dict_to_json(data: dict,
@@ -132,128 +155,264 @@ def json_str_to_dict(data: str) -> dict:
     '''
     return json.loads(data)
 
-decrypt_key = getpass("Enter decryption key: ")
 
-if not os.path.exists(data_path):
-    dict_to_json(DEFAULT_DATA_DICT,
-                 data_path)
-    encrypt_data(data_path,
-                 decrypt_key)
-
-ssh_data: dict = json_str_to_dict(decrypt_data(data_path,
-                                            decrypt_key))
-
-def client_data_to_client(client_data: dict) -> Client:
+def save_and_encrypt_data(data: dict,
+                          file_path: str,
+                          password: str) -> None:
     '''
-        Converts client data to client
+        Saves and encrypts data
+
+        Args:
+            data: dict
+            file_path: str
+            password: str
+    '''
+    dict_to_json(data = data,
+                 file_path = file_path)
+    encrypt_data(file_path = file_path,
+                 password = password)
+
+
+def create_env(key) -> None:
+    '''
+        Creates environment
+    '''
+    if key:
+        if not os.path.exists(data_path):
+            save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+                                  file_path = data_path,
+                                  password = key)
+    else:
+        print("Decryption key is required.")
+        sys_exit(1)
+
+
+def read_encrypted_json(file_path: str,
+                        password: str) -> dict:
+    '''
+        Reads encrypted JSON file
+
+        Args:
+            file_path: str
+            password: str
+    '''
+    return json_str_to_dict(decrypt_data(file_path,
+                                         password))
+
+
+def client_from_data(client_data: dict) -> SSHClient:
+    '''
+        Creates SSHClient object from data
 
         Args:
             client_data: dict
     '''
-    return Client(host = client_data["host"],
-                  user = client_data["user"],
-                  password = client_data["password"],
-                  port = client_data["port"])
+    return SSHClient(host = client_data["host"],
+                     user = client_data["user"],
+                     password = client_data["password"],
+                     port = client_data["port"])
 
-def clients_data_to_client(clients_data: list[dict]) -> list[Client]:
+
+def clients_from_data(client_datas: list[dict]) -> list[SSHClient]:
     '''
-        Converts clients data to clients
+        Creates SSHClient objects from data
 
         Args:
-            clients_data: list[dict]
+            client_datas: list[dict]
     '''
-    return [client_data_to_client(client_data) for client_data in clients_data]
+    return [client_from_data(client_data) for client_data in client_datas]
 
-def create_client_cli() -> Client:
-    '''
-        Creates client from CLI
-    '''
-    hostname: str = input("Enter hostname: ")
-    username: str = input("Enter username: ")
-    password: str = getpass("Enter password: ")
-    port: int = input("Enter port: (default 22) ")
-    return Client(host = hostname,
-                  user = username,
-                  password = password,
-                  port = 22 if not port else int(port))
 
-def print_clients(client_list: list[Client]) -> None:
+def get_clients(key: str) -> list[SSHClient]:
+    '''
+        Gets clients
+    '''
+    data: dict = read_encrypted_json(file_path = data_path,
+                                     password = key)
+    return clients_from_data(data["clients"])
+
+
+def print_clients(key: str) -> None:
     '''
         Prints clients
-
-        Args:
-            clients: list[Client]
     '''
-    header: list[str] = ["#", "Host", "User", "Port"]
-    data: list = [[i+1, c.host, c.user, c.port] for i, c in enumerate(client_list)]
-    print(term_code.clear)
-    print(tabulate(data,
-                   headers = header,
-                   tablefmt = "fancy_grid"))
-
-
-def ssh_connect(c: Client) -> None:
-    '''
-        Connects to SSH client
-
-        Args:
-            c: Client
-    '''
-    ssh_command: str = f"sshpass -p {c.password} ssh -p {c.port} {c.user}@{c.host}"
-    run(ssh_command, # pylint: disable=subprocess-run-check
-        shell = True)
-
-while True:
-    clients: list[Client] = []
-    if "clients" in ssh_data:
-        if ssh_data["clients"]:
-            clients = sorted(clients_data_to_client(ssh_data["clients"]),
-                             key = lambda c: c.host)
-            print_clients(clients)
-        else:
-            print("No clients found")
+    clients: list[SSHClient] = get_clients(key = key)
+    table_data: list[list[str]] = [[i + 1,
+                                    client.host,
+                                    client.user,
+                                    client.port] for i, client in enumerate(clients)]
+    clear_terminal()
+    if clients:
+        print(tabulate(table_data,
+                       headers = ["#",
+                                  "Host",
+                                  "User",
+                                  "Port"],
+                       tablefmt = "fancy_grid"))
     else:
-        break
-    print("Commands: connect, add, delete, exit")
-    user_input: str = input("-> ")
-    if user_input == "exit":
-        break
-    if user_input.lower().startswith("add"):
-        new_client: Client = create_client_cli()
-        ssh_data["clients"].append(new_client.__dict__)
-        dict_to_json(ssh_data,
-                     data_path)
-        encrypt_data(data_path,
-                     decrypt_key)
-    if user_input.lower().startswith("connect") and clients:
-        input_list: list[str] = user_input.split(" ")
-        client_id = input("Client ID: ") if len(input_list) == 1 else input_list[1]
-        try:
-            client_id = int(client_id)
-        except ValueError as e:
-            print("Please provide a valid client ID")
-            sleep(2)
-            continue
-        if client_id > 0 and client_id <= len(clients):
-            ssh_connect(clients[client_id - 1])
+        print("No clients found.")
+
+
+def command_connect(command: str,
+                    key: str) -> None:
+    '''
+        Connects to client
+
+        Args:
+            command: str
+            key: str
+    '''
+    user_input_split: list[str] = command.split(" ")
+    client_id: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    try:
+        client_id_int: int = int(client_id)
+        clients: list[SSHClient] = get_clients(key = key)
+        if 0 < client_id_int <= len(clients):
+            clients[client_id_int - 1].connect()
         else:
-            print("Invalid client ID")
+            print("Invalid client ID.")
             sleep(2)
-    if user_input.lower().startswith("delete"):
-        input_list: list[str] = user_input.split(" ")
-        client_id = input("Client ID: ") if len(input_list) == 1 else input_list[1]
-        try:
-            client_id = int(client_id)
-        except ValueError as e:
-            print("Please provide a valid client ID")
+    except ValueError:
+        print("Invalid client ID.")
+        sleep(2)
+
+
+def command_add(key = str) -> None:
+    '''
+        Adds client
+
+        Args:
+            key: str
+    '''
+    host: str = input("Enter host: ")
+    user: str = input("Enter user: ")
+    password: str = getpass("Enter password: ")
+    port: int = input("Enter port: (default 22)")
+    data: dict = read_encrypted_json(file_path = data_path,
+                                    password = key)
+    data["clients"].append({"host": host,
+                            "user": user,
+                            "password": password,
+                            "port": int(port) if port and isinstance(port, int) else 22})
+    save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+                          file_path = data_path,
+                          password = key)
+    print("Client added successfully.")
+    sleep(2)
+
+
+def command_edit(commands: str,
+                 key: str) -> None:
+    '''
+        Edits client
+
+        Args:
+            commands: str
+            key: str
+    '''
+    user_input_split: list[str] = commands.split(" ")
+    client_id: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    try:
+        client_id_int: int = int(client_id)
+        clients: list[SSHClient] = get_clients(key = key)
+        if 0 < client_id_int <= len(clients):
+            client: SSHClient = clients[client_id_int - 1]
+            print("Edit client:")
+            host: str = input(f"Enter host ({client.host}): ") or client.host
+            user: str = input(f"Enter user ({client.user}): ") or client.user
+            password: str = getpass("Enter password: ") or client.password
+            port: str = input(f"Enter port ({client.port}): ") or client.port
+            data: dict = read_encrypted_json(file_path = data_path,
+                                            password = key)
+            data["clients"][client_id_int - 1] = {"host": host,
+                                                  "user": user,
+                                                  "password": password,
+                                                  "port": int(port) if port and isinstance(port, int) else 22} # pylint: disable=line-too-long
+            save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+                                  file_path = data_path,
+                                  password = key)
+            print("Client updated successfully.")
             sleep(2)
-            continue
-        if client_id > 0 and client_id <= len(clients):
-            client_to_del = clients[client_id - 1]
-            confirm: str = input(f"Delete '{client_to_del.user}@{client_to_del.host}'? (y/N) ")
+    except Exception as e: # pylint: disable=broad-exception-caught
+        print(f"Error: {e}")
+        sleep(2)
+
+
+def command_remove(commands: str,
+                   key: str) -> None:
+    '''
+        Removes client
+
+        Args:
+            commands: str
+            key: str
+    '''
+    user_input_split: list[str] = commands.split(" ")
+    client_id: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    try:
+        client_id_int: int = int(client_id)
+        data: dict = read_encrypted_json(file_path = data_path,
+                                        password = key)
+        clients: list[dict] = data["clients"]
+        if 0 < client_id_int <= len(clients):
+            confirm: str = input("Are you sure you want to remove this client? (y/N): ")
             if confirm.lower() == "y":
-                ssh_data["clients"].pop(client_id - 1)
-                dict_to_json(ssh_data,
-                             data_path)
-                encrypt_data(data_path,
-                             decrypt_key)
+                clients.pop(client_id_int - 1)
+                save_and_encrypt_data(data = DEFAULT_DATA_DICT,
+                                      file_path = data_path,
+                                      password = key)
+                print("Client removed successfully.")
+                sleep(2)
+        else:
+            print("Invalid client ID.")
+            sleep(2)
+    except ValueError:
+        print("Invalid client ID.")
+        sleep(2)
+
+
+def command_handle(command: str,
+                   key: str) -> None:
+    '''
+        Handles commands
+    '''
+    match command.lower():
+        case _ if command.lower().startswith("connect"):
+            command_connect(command = command,
+                            key = key)
+        case "add":
+            command_add(key = key)
+        case _ if command.lower().startswith("edit"):
+            command_edit(commands = command,
+                         key = key)
+        case _ if command.lower().startswith("remove"):
+            command_remove(commands = command,
+                           key = key)
+        case "exit":
+            print("Bye!")
+            sys_exit(0)
+        case _:
+            print("Invalid command.")
+            sleep(2)
+
+
+def ssh_man() -> None:
+    '''
+        SSH Manager
+    '''
+    decrypt_key: str | None = getpass("Enter decryption key: ")
+    create_env(decrypt_key)
+    while True:
+        try:
+            print_clients(key = decrypt_key)
+            print("Commands: connect, add, edit, remove, exit")
+            user_input: str = input("> ")
+            command_handle(command = user_input,
+                           key = decrypt_key)
+        except KeyboardInterrupt:
+            print("\nBye!")
+            sys_exit(0)
+
+
+if __name__ == "__main__":
+    ssh_man()
