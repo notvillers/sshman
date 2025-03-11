@@ -219,7 +219,8 @@ def get_clients(key: str) -> list[SSHClient]:
     '''
     data: dict = read_encrypted_json(file_path = data_path,
                                      password = key)
-    return clients_from_data(data["clients"])
+    return sorted(clients_from_data(data["clients"]),
+                  key = lambda client: F"{client.host}{client.user}{client.port}")
 
 
 def print_clients(key: str | None,
