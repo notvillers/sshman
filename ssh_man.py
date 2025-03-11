@@ -49,7 +49,8 @@ def clear_terminal() -> None:
     '''
         Clears terminal
     '''
-    print("\033[H\033[J")
+    print("\033[H\033[J",
+          end = "")
 
 
 def dict_to_json(data: dict,
