@@ -431,24 +431,26 @@ def command_password(command: str,
     input_split: list[str] = command.split(" ")
     old_pw: str = getpass("Enter old password: ") if len(input_split) < 3 else input_split[1]
     new_pw: str = getpass("Enter new password: ") if len(input_split) < 3 else input_split[2]
-    conf_new_pw: str = getpass("Confirm new password: ") if len(input_split) < 3 else input_split[3]
-    if key == old_pw:
-        if new_pw == conf_new_pw:
-            confirm: str = input("Are you sure you want to change the password? (y/N): ")
-            if confirm.lower() == "y":
-                data: dict = read_encrypted_json(file_path = data_path,
-                                                 password = key)
-                save_and_encrypt_data(data = data,
-                                      file_path = data_path,
-                                      password = new_pw)
-                print_and_sleep(content = "Password changed successfully, please restart.")
-                sys_exit(0)
+    conf_new_pw: str = getpass("Confirm new password: ") if len(input_split) < 3 else input_split[2]
+    if old_pw and new_pw and conf_new_pw:
+        if key == old_pw:
+            if new_pw == conf_new_pw:
+                confirm: str = input("Are you sure you want to change the password? (y/N): ")
+                if confirm.lower() == "y":
+                    data: dict = read_encrypted_json(file_path = data_path,
+                                                     password = key)
+                    save_and_encrypt_data(data = data,
+                                          file_path = data_path,
+                                          password = new_pw)
+                    clear_terminal()
+                    print("Password changed successfully, please restart.")
+                    sys_exit(0)
+                else:
+                    print_and_sleep(content = "Password change cancelled.")
             else:
-                print_and_sleep(content = "Password change cancelled.")
+                print_and_sleep(content = "New passwords do not match.")
         else:
-            print_and_sleep(content = "New passwords do not match.")
-    else:
-        print_and_sleep(content = "Invalid old password.")
+            print_and_sleep(content = "Invalid old password.")
 
 
 
