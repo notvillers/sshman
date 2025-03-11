@@ -21,6 +21,15 @@ data_path: str = os.path.join(path,
 DEFAULT_DATA_DICT: dict = {"clients": []}
 DEFAULT_PORT: int = 22
 
+class SshManException(Exception):
+    '''
+        SSH Manager Exception
+    '''
+    def __init__(self,
+                 message: str) -> None:
+        super().__init__(message)
+
+
 @dataclass
 class SSHClient:
     '''
@@ -217,8 +226,11 @@ def get_clients(key: str) -> list[SSHClient]:
     '''
         Gets clients
     '''
-    data: dict = read_encrypted_json(file_path = data_path,
-                                     password = key)
+    try:
+        data: dict = read_encrypted_json(file_path = data_path,
+                                         password = key)
+    except ValueError as ve:
+        raise SshManException(message = "Maybe invalid decryption key.") from ve
     return sorted(clients_from_data(data["clients"]),
                   key = lambda client: F"{client.host}{client.user}{client.port}")
 
@@ -250,6 +262,19 @@ def print_clients(key: str | None,
         print("No clients found.")
 
 
+def print_and_sleep(content: str = "",
+                    sleep_timer: int = 2) -> None:
+    '''
+        Prints content and sleeps
+
+        Args:
+            content: str
+            sleep_timer: int
+    '''
+    print(content)
+    sleep(sleep_timer)
+
+
 def find_client(search: str,
                 key: str) -> SSHClient | None:
     '''
@@ -266,8 +291,7 @@ def find_client(search: str,
             if 0 <= index < len(clients):
                 return clients[index]
         except ValueError:
-            print("Invalid client ID.")
-            sleep(2)
+            print_and_sleep(content = "Invalid client ID.")
     else:
         found_clients: list[SSHClient] | None = []
         for client in clients:
@@ -293,8 +317,8 @@ def command_connect(command: str,
             command: str
             key: str
     '''
-    user_input_split: list[str] = command.split(" ")
-    search: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    input_split: list[str] = command.split(" ")
+    search: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
     client: SSHClient | None = find_client(search = search,
                                            key = key)
     if client:
@@ -321,8 +345,7 @@ def command_add(key = str) -> None:
     save_and_encrypt_data(data = data,
                           file_path = data_path,
                           password = key)
-    print("Client added successfully.")
-    sleep(2)
+    print_and_sleep(content = "Client added successfully.")
 
 
 def command_edit(commands: str,
@@ -334,8 +357,8 @@ def command_edit(commands: str,
             commands: str
             key: str
     '''
-    user_input_split: list[str] = commands.split(" ")
-    client_id: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    input_split: list[str] = commands.split(" ")
+    client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
     try:
         client_id_int: int = int(client_id)
         clients: list[SSHClient] = get_clients(key = key)
@@ -363,8 +386,7 @@ def command_edit(commands: str,
             print("Client updated successfully.")
             sleep(2)
     except Exception as e: # pylint: disable=broad-exception-caught
-        print(f"Error: {e}")
-        sleep(2)
+        print_and_sleep(content = f"Error: {e}")
 
 
 def command_remove(commands: str,
@@ -376,8 +398,8 @@ def command_remove(commands: str,
             commands: str
             key: str
     '''
-    user_input_split: list[str] = commands.split(" ")
-    client_id: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    input_split: list[str] = commands.split(" ")
+    client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
     try:
         client_id_int: int = int(client_id)
         data: dict = read_encrypted_json(file_path = data_path,
@@ -390,14 +412,44 @@ def command_remove(commands: str,
                 save_and_encrypt_data(data = data,
                                       file_path = data_path,
                                       password = key)
-                print("Client removed successfully.")
-                sleep(2)
+                print_and_sleep(content = "Client removed successfully.")
         else:
-            print("Invalid client ID.")
-            sleep(2)
+            print_and_sleep(content = "Invalid client ID.")
     except ValueError:
-        print("Invalid client ID.")
-        sleep(2)
+        print_and_sleep(content = "Invalid client ID.")
+
+
+def command_password(command: str,
+                     key: str) -> None:
+    '''
+        Change password on encrypted file
+
+        Args:
+            command: str
+            key: str
+    '''
+    input_split: list[str] = command.split(" ")
+    old_pw: str = getpass("Enter old password: ") if len(input_split) < 3 else input_split[1]
+    new_pw: str = getpass("Enter new password: ") if len(input_split) < 3 else input_split[2]
+    conf_new_pw: str = getpass("Confirm new password: ") if len(input_split) < 3 else input_split[3]
+    if key == old_pw:
+        if new_pw == conf_new_pw:
+            confirm: str = input("Are you sure you want to change the password? (y/N): ")
+            if confirm.lower() == "y":
+                data: dict = read_encrypted_json(file_path = data_path,
+                                                 password = key)
+                save_and_encrypt_data(data = data,
+                                      file_path = data_path,
+                                      password = new_pw)
+                print_and_sleep(content = "Password changed successfully, please restart.")
+                sys_exit(0)
+            else:
+                print_and_sleep(content = "Password change cancelled.")
+        else:
+            print_and_sleep(content = "New passwords do not match.")
+    else:
+        print_and_sleep(content = "Invalid old password.")
+
 
 
 def command_handle(command: str,
@@ -417,12 +469,14 @@ def command_handle(command: str,
         case _ if command.lower().startswith("remove"):
             command_remove(commands = command,
                            key = key)
+        case _ if command.lower().startswith("password"):
+            command_password(command = command,
+                             key = key)
         case "exit":
             print("Bye!")
             sys_exit(0)
         case _:
-            print("Invalid command.")
-            sleep(2)
+            print_and_sleep(content = "Invalid command.")
 
 
 def ssh_man() -> None:
@@ -434,7 +488,7 @@ def ssh_man() -> None:
     while True:
         try:
             print_clients(key = decrypt_key)
-            print("Commands: connect, add, edit, remove, exit")
+            print("Commands: connect, add, edit, remove, password, exit")
             user_input: str = input("> ")
             command_handle(command = user_input,
                            key = decrypt_key)
