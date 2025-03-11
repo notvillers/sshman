@@ -57,7 +57,6 @@ class SSHClient:
             print(f"Connecting to {self.user}@{self.host}...")
             run(f"sshpass -p {self.password} ssh -p {self.port} {self.user}@{self.host}", # pylint: disable=subprocess-run-check
                 shell = True)
-            print(f"Connection to {self.user}@{self.host} closed.")
             sleep(2)
         except Exception as e: # pylint: disable=broad-exception-caught
             print(f"Error: {e}")
@@ -233,7 +232,8 @@ def get_clients(key: str) -> list[SSHClient]:
     return clients_from_data(data["clients"])
 
 
-def print_clients(key: str) -> None:
+def print_clients(key: str | None,
+                  clients: list[SSHClient] | None = None) -> None:
     '''
         Prints clients
     '''
@@ -254,6 +254,40 @@ def print_clients(key: str) -> None:
         print("No clients found.")
 
 
+def find_client(search: str,
+                key: str) -> SSHClient | None:
+    '''
+        Finds clients
+
+        Args:
+            search: str
+            key: str
+    '''
+    clients: list[SSHClient] = get_clients(key = key)
+    if search.isdigit():
+        try:
+            index: int = int(search) - 1
+            if 0 <= index < len(clients):
+                return clients[index]
+        except ValueError:
+            print("Invalid client ID.")
+            sleep(2)
+    else:
+        found_clients: list[SSHClient] | None = []
+        for client in clients:
+            if search in f"{client.user}@{client.host}:{client.port}":
+                found_clients.append(client)
+        if len(found_clients) == 1:
+            return found_clients[0]
+        elif len(found_clients) > 1:
+            print("Multiple clients found:")
+            for i, client in enumerate(found_clients):
+                print(f"{i + 1}. {client.user}@{client.host}:{client.port}")
+            sleep(2)
+            return None
+    return None
+
+
 def command_connect(command: str,
                     key: str) -> None:
     '''
@@ -264,18 +298,11 @@ def command_connect(command: str,
             key: str
     '''
     user_input_split: list[str] = command.split(" ")
-    client_id: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
-    try:
-        client_id_int: int = int(client_id)
-        clients: list[SSHClient] = get_clients(key = key)
-        if 0 < client_id_int <= len(clients):
-            clients[client_id_int - 1].connect()
-        else:
-            print("Invalid client ID.")
-            sleep(2)
-    except ValueError:
-        print("Invalid client ID.")
-        sleep(2)
+    search: str = input("Client ID: ") if len(user_input_split) == 1 else user_input_split[1]
+    client: SSHClient | None = find_client(search = search,
+                                           key = key)
+    if client:
+        client.connect()
 
 
 def command_add(key = str) -> None:
