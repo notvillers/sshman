@@ -27,6 +27,12 @@ class SshManException(Exception):
     '''
     def __init__(self,
                  message: str) -> None:
+        '''
+            SSH Manager Exception
+
+            Args:
+                message: str
+        '''
         super().__init__(message)
 
 
