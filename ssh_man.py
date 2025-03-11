@@ -22,24 +22,6 @@ DEFAULT_DATA_DICT: dict = {"clients": []}
 DEFAULT_PORT: int = 22
 
 @dataclass
-class TerminalCode:
-    '''
-        Terminal codes dataclass
-    '''
-    clear: str = "\033[H\033[J"
-
-
-term_code: TerminalCode = TerminalCode()
-
-
-def clear_terminal() -> None:
-    '''
-        Clears terminal
-    '''
-    print(term_code.clear)
-
-
-@dataclass
 class SSHClient:
     '''
         SSH Client dataclass
@@ -61,6 +43,13 @@ class SSHClient:
         except Exception as e: # pylint: disable=broad-exception-caught
             print(f"Error: {e}")
             sleep(2)
+
+
+def clear_terminal() -> None:
+    '''
+        Clears terminal
+    '''
+    print("\033[H\033[J")
 
 
 def dict_to_json(data: dict,
@@ -236,6 +225,10 @@ def print_clients(key: str | None,
                   clients: list[SSHClient] | None = None) -> None:
     '''
         Prints clients
+
+        Args:
+            key: str
+            clients: list[SSHClient] | None
     '''
     clients: list[SSHClient] = get_clients(key = key)
     table_data: list[list[str]] = [[i + 1,
@@ -244,6 +237,7 @@ def print_clients(key: str | None,
                                     client.port] for i, client in enumerate(clients)]
     clear_terminal()
     if clients:
+        print("SSH MANAGER")
         print(tabulate(table_data,
                        headers = ["#",
                                   "Host",
