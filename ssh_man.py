@@ -231,6 +231,9 @@ def clients_from_data(client_datas: list[dict]) -> list[SSHClient]:
 def get_clients(key: str) -> list[SSHClient]:
     '''
         Gets clients
+
+        Args:
+            key: str
     '''
     try:
         data: dict = read_encrypted_json(file_path = data_path,
@@ -238,7 +241,7 @@ def get_clients(key: str) -> list[SSHClient]:
     except ValueError as ve:
         raise SshManException(message = "Maybe invalid decryption key.") from ve
     return sorted(clients_from_data(data["clients"]),
-                  key = lambda client: F"{client.host}{client.user}{client.port}")
+                  key = lambda client: f"{client.host}{client.user}{client.port}")
 
 
 def print_clients(key: str | None,
@@ -309,6 +312,7 @@ def find_client(search: str,
             print("Multiple clients found:")
             for i, client in enumerate(found_clients):
                 print(f"{i + 1}. {client.user}@{client.host}:{client.port}")
+            print("Please use client ID or be more specific.")
             sleep(2)
             return None
     return None
