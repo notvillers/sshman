@@ -20,6 +20,7 @@ data_path: str = os.path.join(path,
                               "data.json.enc")
 DEFAULT_DATA_DICT: dict = {"clients": []}
 DEFAULT_PORT: int = 22
+SLEEP_TIMER: float = 1.5
 
 class SshManException(Exception):
     '''
@@ -54,10 +55,10 @@ class SSHClient:
             print(f"Connecting to {self.user}@{self.host}...")
             run(f"sshpass -p {self.password} ssh -p {self.port} {self.user}@{self.host}", # pylint: disable=subprocess-run-check
                 shell = True)
-            sleep(2)
+            sleep(SLEEP_TIMER)
         except Exception as e: # pylint: disable=broad-exception-caught
             print(f"Error: {e}")
-            sleep(2)
+            sleep(SLEEP_TIMER)
 
 
 def clear_terminal() -> None:
@@ -66,6 +67,16 @@ def clear_terminal() -> None:
     '''
     print("\033[H\033[J",
           end = "")
+
+
+def terminal_red(text: str) -> str:
+    '''
+        Terminal red text
+
+        Args:
+            text: str
+    '''
+    return f"\033[91m{text}\033[0m"
 
 
 def dict_to_json(data: dict,
@@ -253,7 +264,7 @@ def print_clients(key: str | None,
             key: str
             clients: list[SSHClient] | None
     '''
-    clients: list[SSHClient] = get_clients(key = key)
+    clients: list[SSHClient] = clients or get_clients(key = key)
     table_data: list[list[str]] = [[i + 1,
                                     client.host,
                                     client.user,
@@ -272,7 +283,7 @@ def print_clients(key: str | None,
 
 
 def print_and_sleep(content: str = "",
-                    sleep_timer: int = 2) -> None:
+                    sleep_timer: int = SLEEP_TIMER) -> None:
     '''
         Prints content and sleeps
 
@@ -333,6 +344,64 @@ def command_connect(command: str,
                                            key = key)
     if client:
         client.connect()
+
+
+def filter_clients(clients: list[SSHClient],
+                   filter_text: str) -> list[SSHClient]:
+    '''
+        Filters clients
+
+        Args:
+            clients: list[SSHClient]
+            filter: str
+    '''
+    filtered_clients: list[SSHClient] = []
+    for client in clients:
+        if filter_text in f"{client.host}{client.user}{client.port}".lower():
+            filtered_clients.append(client)
+    return filtered_clients
+
+
+def global_filter(clients: list[SSHClient] | None = None) -> None:
+    '''
+        Global filter
+
+        Args:
+            client: list[SSHClient] | None (default None)
+    '''
+    global filtered_clients # pylint: disable=global-statement
+    global filtered # pylint: disable=global-statement
+    if clients:
+        filtered_clients = clients
+        filtered = True
+    else:
+        filtered_clients = []
+        filtered = False
+
+
+def command_filter(commands: str,
+                   key: str) -> None:
+    '''
+        Filters clients
+
+        Args:
+            commands: str
+            key: str
+    '''
+    if filtered_clients: # pylint: disable=used-before-assignment
+        global_filter()
+        return
+    input_split: list[str] = commands.split(" ")
+    filter_text: str = input("Filter: ") if len(input_split) == 1 else input_split[1]
+    global_filter(clients = filter_clients(clients = get_clients(key = key),
+                                           filter_text = filter_text))
+
+
+def command_unfilter() -> None:
+    '''
+        Unfilters clients
+    '''
+    global_filter()
 
 
 def command_add(key = str) -> None:
@@ -463,44 +532,60 @@ def command_password(command: str,
             print_and_sleep(content = "Invalid old password.")
 
 
-
 def command_handle(command: str,
                    key: str) -> None:
     '''
         Handles commands
     '''
     match command.lower():
-        case _ if command.lower().startswith("connect"):
+        # connect
+        case _ if command.lower().startswith("connect") or command.lower().split(" ")[0] == "c":
             command_connect(command = command,
                             key = key)
-        case "add":
+        # filter
+        case _ if command.lower().startswith("filter") or command.lower().split(" ")[0] == "f":
+            command_filter(commands = command,
+                           key = key)
+        # add
+        case _ if command in ["add", "a"]:
             command_add(key = key)
-        case _ if command.lower().startswith("edit"):
+        # edit
+        case _ if command.lower().startswith("edit") or command.lower().split(" ")[0] == "e":
             command_edit(commands = command,
                          key = key)
-        case _ if command.lower().startswith("remove"):
+        # remove
+        case _ if command.lower().startswith("remove") or command.lower().split(" ")[0] == "r":
             command_remove(commands = command,
                            key = key)
-        case _ if command.lower().startswith("password"):
+        # password
+        case _ if command.lower().startswith("password") or command.lower().split(" ")[0] == "p":
             command_password(command = command,
                              key = key)
+        # exit
         case "exit":
             print("Bye!")
             sys_exit(0)
+        # default
         case _:
             print_and_sleep(content = "Invalid command.")
 
+filtered_clients: list[SSHClient] = []
+filtered: bool = False
 
 def ssh_man() -> None:
     '''
         SSH Manager
     '''
+    return_value: any = None
     decrypt_key: str | None = getpass("Enter decryption key: ")
     create_env(decrypt_key)
     while True:
         try:
-            print_clients(key = decrypt_key)
-            print("Commands: connect, add, edit, remove, password, exit")
+            print_clients(key = decrypt_key,
+                          clients = filtered_clients or return_value)
+            if filtered:
+                print(terminal_red("↑ FILTERED"))
+            print("Commands: connect (c), filter (f), add (a), edit (e), remove (r), password (p), exit") # pylint: disable=line-too-long
             user_input: str = input("> ")
             command_handle(command = user_input,
                            key = decrypt_key)

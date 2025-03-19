@@ -2,4 +2,4 @@
 SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 cd "$SCRIPT_DIR"
-bash ssh_man.sh "$@"
+bash ssh-man.sh "$@"
