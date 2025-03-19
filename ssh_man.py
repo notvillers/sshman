@@ -355,11 +355,11 @@ def filter_clients(clients: list[SSHClient],
             clients: list[SSHClient]
             filter: str
     '''
-    filtered_clients: list[SSHClient] = []
+    filtereds: list[SSHClient] = []
     for client in clients:
         if filter_text in f"{client.host}{client.user}{client.port}".lower():
-            filtered_clients.append(client)
-    return filtered_clients
+            filtereds.append(client)
+    return filtereds
 
 
 def global_filter(clients: list[SSHClient] | None = None) -> None:
