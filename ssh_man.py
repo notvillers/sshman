@@ -730,6 +730,41 @@ def command_password(command: str,
             print_and_sleep(content = "Invalid old password.")
 
 
+def command_export(command: str,
+                   key: str) -> None:
+    '''
+        Exports clients
+
+        Args:
+            command: str
+            key: str
+    '''
+    input_split: list[str] = command.split(" ")
+    password: str = getpass("Enter password: ") if len(input_split) == 1 else input_split[1]
+    file_path: str = input("Enter file path: ") if len(input_split) < 3 else input_split[2]
+    confirm: str = input("Are you sure you want to export clients? (y/N): ")
+    if not password or not file_path:
+        print_and_sleep(content = "Password and file path are required.")
+    elif confirm.lower() != "y":
+        print_and_sleep(content = "Export cancelled.")
+    elif password and file_path and password == key:
+        data: dict = read_encrypted_json(file_path = data_path,
+                                         password = key)
+        dict_to_json(data = data,
+                     file_path = file_path)
+        print_and_sleep(content = f"Clients exported successfully to '{file_path}'.")
+    elif password != key:
+        print_and_sleep(content = "Invalid password.")
+    else:
+        if not password or not file_path:
+            errors: list[str] = []
+            if not password:
+                errors.append("Password is required.")
+            if not file_path:
+                errors.append("File path is required.")
+            print_and_sleep(content = "\n".join(errors))
+
+
 def command_handle(command: str,
                    key: str) -> None:
     '''
@@ -766,6 +801,11 @@ def command_handle(command: str,
         case _ if command.lower().startswith("password") or command.lower().split(" ")[0] == "p":
             command_password(command = command,
                              key = key)
+        # export
+        case _ if command.lower().startswith("export") or command.lower().split(" ")[0] == "exp":
+            # TODO: Export
+            command_export(command = command,
+                           key = key)
         # exit
         case "exit":
             print("Bye!")
@@ -819,8 +859,9 @@ def print_clients(key: str | None) -> None:
                                      ["Edit (e)", "Edits client"],
                                      ["Remove (r)", "Removes client"],
                                      ["Filter (f)", "Filters clients"],
-                                     ["Favorite (fav)", "Favorites client"],
+                                     ["Favorite (fav)", f"Favorites client {terminal_yellow('*')}"],
                                      ["Password (p)", "Changes password"],
+                                     ["Export (exp)", "Exports clients to unencrypted JSON"],
                                      ["Exit (CTRL+C)", "Exits SSH Manager"]]
     commands_table: str = tabulate(command_data,
                                     headers = ["Command",
