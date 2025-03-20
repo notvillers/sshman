@@ -860,7 +860,7 @@ def print_clients(key: str | None) -> None:
                                      ["Filter (f)", "Filters clients"],
                                      ["Favorite (fav)", f"Favorites client {terminal_yellow('*')}"],
                                      ["Password (p)", "Changes password"],
-                                     ["Export (exp)", "Exports clients to unencrypted JSON"],
+                                     ["Export (exp)", "Exports to decrypted .json"],
                                      ["Exit (CTRL+C)", "Exits SSH Manager"]]
     commands_table: str = tabulate(command_data,
                                     headers = ["Command",
