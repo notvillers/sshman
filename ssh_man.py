@@ -6,18 +6,20 @@ from sys import exit as sys_exit
 import base64
 import json
 from typing import Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from subprocess import run
 from time import sleep
+from uuid import uuid4
 from getpass import getpass
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Protocol.KDF import scrypt
 from tabulate import tabulate
 
+first_run: bool = True
 path: str = os.path.abspath(os.path.dirname(__file__))
 data_path: str = os.path.join(path,
-                              "data.json.enc")
+                              "data.aes")
 DEFAULT_DATA_DICT: dict = {"clients": []}
 DEFAULT_PORT: int = 22
 SLEEP_TIMER: float = 1.5
@@ -37,6 +39,13 @@ class SshManException(Exception):
         super().__init__(message)
 
 
+def get_uuid() -> str:
+    '''
+        Gets UUID
+    '''
+    return str(uuid4())
+
+
 @dataclass
 class SSHClient:
     '''
@@ -46,6 +55,8 @@ class SSHClient:
     user: str
     password: str
     port: int = DEFAULT_PORT
+    favorite: bool = False
+    client_id: str = field(default_factory = get_uuid)
 
     def connect(self) -> None:
         '''
@@ -60,6 +71,11 @@ class SSHClient:
             print(f"Error: {e}")
             sleep(SLEEP_TIMER)
 
+
+filtered_clients: list[SSHClient] = []
+filter_key: str | None = None
+filtered: bool = False
+filter_info: str | None = None
 
 def clear_terminal() -> None:
     '''
@@ -77,6 +93,16 @@ def terminal_red(text: str) -> str:
             text: str
     '''
     return f"\033[91m{text}\033[0m"
+
+
+def terminal_yellow(text: str) -> str:
+    '''
+        Terminal yellow text
+
+        Args:
+            text: str
+    '''
+    return f"\033[93m{text}\033[0m"
 
 
 def dict_to_json(data: dict,
@@ -131,6 +157,7 @@ def encrypt_data(file_path: str,
               encoding = encoding) as file:
         file.write(encrypted_string)
 
+
 def decrypt_data(file_path: str,
                  password: str,
                  encoding: str = "utf-8-sig") -> str:
@@ -161,6 +188,7 @@ def decrypt_data(file_path: str,
     decrypted_data = unpad(cipher.decrypt(encrypted_data),
                            AES.block_size)
     return decrypted_data.decode(encoding)
+
 
 def json_str_to_dict(data: str) -> dict:
     '''
@@ -223,10 +251,12 @@ def client_from_data(client_data: dict) -> SSHClient:
         Args:
             client_data: dict
     '''
-    return SSHClient(host = client_data["host"],
+    return SSHClient(client_id = client_data["client_id"],
+                     host = client_data["host"],
                      user = client_data["user"],
                      password = client_data["password"],
-                     port = client_data["port"])
+                     port = client_data["port"],
+                     favorite = client_data["favorite"] if "favorite" in client_data else False)
 
 
 def clients_from_data(client_datas: list[dict]) -> list[SSHClient]:
@@ -252,34 +282,72 @@ def get_clients(key: str) -> list[SSHClient]:
     except ValueError as ve:
         raise SshManException(message = "Maybe invalid decryption key.") from ve
     return sorted(clients_from_data(data["clients"]),
-                  key = lambda client: f"{client.host}{client.user}{client.port}")
+                  key = lambda c: f"{0 if c.favorite else 1}{c.host}{c.user}{c.port}")
 
 
-def print_clients(key: str | None,
-                  clients: list[SSHClient] | None = None) -> None:
+def current_clients(key: str) -> list[SSHClient]:
     '''
-        Prints clients
+        Current clients
 
         Args:
             key: str
-            clients: list[SSHClient] | None
     '''
-    clients: list[SSHClient] = clients or get_clients(key = key)
-    table_data: list[list[str]] = [[i + 1,
-                                    client.host,
-                                    client.user,
-                                    client.port] for i, client in enumerate(clients)]
-    clear_terminal()
-    if clients:
-        print("SSH MANAGER")
-        print(tabulate(table_data,
-                       headers = ["#",
-                                  "Host",
-                                  "User",
-                                  "Port"],
-                       tablefmt = "fancy_grid"))
-    else:
-        print("No clients found.")
+    if filtered:
+        return filtered_clients
+    return get_clients(key = key)
+
+
+def get_client_id(clients: list[SSHClient],
+                  input_id: str) -> int:
+    '''
+        Gets client ID
+
+        Args:
+            clients: list[SSHClient]
+            filter: str | int
+    '''
+    if input_id.isdigit():
+        input_id_int: int = int(input_id)
+        if 0 < input_id_int <= len(clients):
+            return clients[input_id_int - 1].client_id
+        print_and_sleep(content = "Invalid client ID.")
+        return None
+    for client in clients:
+        client_ids: list[int] = []
+        for client in clients:
+            if input_id in f"{client.host}{client.user}{client.port}":
+                client_ids.append(client.client_id)
+        if len(client_ids) == 1:
+            return client_ids[0]
+        print_and_sleep(content = "Multiple clients found, be more specific.")
+        return None
+
+
+def get_client_by_client_id(clients: list[SSHClient],
+                            client_id: int) -> SSHClient | None:
+    '''
+        Gets client by client ID
+
+        Args:
+            clients: list[SSHClient]
+            client_id: int
+    '''
+    for client in clients:
+        if client.client_id == client_id:
+            return client
+    return None
+
+
+def get_filter() -> str:
+    '''
+        Prints filter info
+    '''
+    if filtered and filter_info:
+        text: str = "FILTERED"
+        if filter_info:
+            text += f" - {filter_info}"
+        return terminal_red(text if text else "")
+    return ""
 
 
 def print_and_sleep(content: str = "",
@@ -329,6 +397,35 @@ def find_client(search: str,
     return None
 
 
+def get_clients_dict(key: str) -> list[dict]:
+    '''
+        Gets clients dictionary
+
+        Args:
+            key: str
+    '''
+    clients_dict: dict = [client.__dict__ for client in get_clients(key = key)]
+    return sorted(clients_dict,
+                  key = lambda c: f"{0 if c['favorite'] else 1}{c['host']}{c['user']}{c['port']}")
+
+
+def save_clients_dict(clients_dict: list[dict],
+                      key: str) -> None:
+    '''
+        Saves clients dictionary
+
+        Args:
+            clients_dict: list[dict]
+            key: str
+    '''
+    data: dict = read_encrypted_json(file_path = data_path,
+                                     password = key)
+    data["clients"] = clients_dict
+    save_and_encrypt_data(data = data,
+                          file_path = data_path,
+                          password = key)
+
+
 def command_connect(command: str,
                     key: str) -> None:
     '''
@@ -362,7 +459,8 @@ def filter_clients(clients: list[SSHClient],
     return filtereds
 
 
-def global_filter(clients: list[SSHClient] | None = None) -> None:
+def global_filter(clients: list[SSHClient] | None = None,
+                  filter_str: str | None = None) -> None:
     '''
         Global filter
 
@@ -371,12 +469,26 @@ def global_filter(clients: list[SSHClient] | None = None) -> None:
     '''
     global filtered_clients # pylint: disable=global-statement
     global filtered # pylint: disable=global-statement
+    global filter_key # pylint: disable=global-statement
     if clients:
-        filtered_clients = clients
+        filtered_clients = filter_clients(clients = clients,
+                                          filter_text = filter_str)
         filtered = True
     else:
         filtered_clients = []
         filtered = False
+    filter_key = filter_str or None
+
+
+def global_filter_info(text: str | None = None) -> None:
+    '''
+        Global filter info
+
+        Args:
+            text: str | None
+    '''
+    global filter_info # pylint: disable=global-statement
+    filter_info = text
 
 
 def command_filter(commands: str,
@@ -388,13 +500,21 @@ def command_filter(commands: str,
             commands: str
             key: str
     '''
-    if filtered_clients: # pylint: disable=used-before-assignment
-        global_filter()
-        return
     input_split: list[str] = commands.split(" ")
     filter_text: str = input("Filter: ") if len(input_split) == 1 else input_split[1]
-    global_filter(clients = filter_clients(clients = get_clients(key = key),
-                                           filter_text = filter_text))
+    if filtered_clients and not filter_text:
+        global_filter()
+        global_filter_info()
+        return
+    global_filter(clients = get_clients(key = key),
+                  filter_str = filter_text)
+    if filter_text and filtered and not filtered_clients:
+        global_filter_info(text = f"No clients found for '{filter_text}'.")
+    if filter_text and filtered and filtered_clients:
+        global_filter_info(text = f"Clients for '{filter_text}'.")
+    if not filter_text:
+        global_filter()
+        global_filter_info()
 
 
 def command_unfilter() -> None:
@@ -402,6 +522,7 @@ def command_unfilter() -> None:
         Unfilters clients
     '''
     global_filter()
+    global_filter_info()
 
 
 def command_add(key = str) -> None:
@@ -414,17 +535,52 @@ def command_add(key = str) -> None:
     host: str = input("Enter host: ")
     user: str = input("Enter user: ")
     password: str = getpass("Enter password: ")
-    port: int = input("Enter port: (default 22)")
-    data: dict = read_encrypted_json(file_path = data_path,
-                                    password = key)
-    data["clients"].append({"host": host,
-                            "user": user,
-                            "password": password,
-                            "port": int(port) if port and isinstance(port, int) else 22})
-    save_and_encrypt_data(data = data,
-                          file_path = data_path,
-                          password = key)
-    print_and_sleep(content = "Client added successfully.")
+    port: int = input(f"Enter port (default {DEFAULT_PORT}): ")
+    if not host or not user or not password:
+        print_and_sleep(content = "Host, user and password are required.")
+        return
+    new_client: SSHClient = SSHClient(host = host,
+                                      user = user,
+                                      password = password,
+                                      port = port or DEFAULT_PORT)
+    clients_dict: list[dict] = get_clients_dict(key = key)
+    clients_dict.append(new_client.__dict__)
+    save_clients_dict(clients_dict = clients_dict,
+                      key = key)
+    print_and_sleep(f"Client added under '{new_client.client_id}' ID")
+    if filtered:
+        global_filter(clients = get_clients(key = key),
+                      filter_str = filter_key)
+
+
+def update_client(client: SSHClient) -> SSHClient:
+    '''
+        Updates client
+
+        Args:
+            client: SSHClient
+    '''
+    client.host = input(f"Enter host ({client.host}): ") or client.host
+    client.user = input(f"Enter user ({client.user}): ") or client.user
+    client.password = getpass("Enter password: ") or client.password
+    client.port = input(f"Enter port ({client.port}): ") or client.port
+    return client
+
+
+def update_clients(clients: list[SSHClient],
+                   client_id: str) -> list[SSHClient]:
+    '''
+        Updates client
+
+        Args:
+            clients: list[SSHClient]
+            client_id: str
+    '''
+    for client in clients:
+        if client.client_id == client_id:
+            client = update_client(client = client)
+            break
+    return clients
 
 
 def command_edit(commands: str,
@@ -438,34 +594,35 @@ def command_edit(commands: str,
     '''
     input_split: list[str] = commands.split(" ")
     client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
-    try:
-        client_id_int: int = int(client_id)
-        clients: list[SSHClient] = get_clients(key = key)
-        if 0 < client_id_int <= len(clients):
-            client: SSHClient = clients[client_id_int - 1]
-            print("Edit client:")
-            host: str = input(f"Enter host ({client.host}): ") or client.host
-            user: str = input(f"Enter user ({client.user}): ") or client.user
-            password: str = getpass("Enter password: ") or client.password
-            port: str = input(f"Enter port ({client.port}): ") or client.port
-            port_int: int = DEFAULT_PORT
-            try:
-                port_int = int(port)
-            except ValueError:
-                pass
-            data: dict = read_encrypted_json(file_path = data_path,
-                                            password = key)
-            data["clients"][client_id_int - 1] = {"host": host,
-                                                  "user": user,
-                                                  "password": password,
-                                                  "port": port_int} # pylint: disable=line-too-long
-            save_and_encrypt_data(data = data,
-                                  file_path = data_path,
-                                  password = key)
-            print("Client updated successfully.")
-            sleep(2)
-    except Exception as e: # pylint: disable=broad-exception-caught
-        print_and_sleep(content = f"Error: {e}")
+    clients: list[SSHClient] = get_clients(key = key)
+    client_id_int: int | None = get_client_id(clients = clients,
+                                                  input_id = client_id)
+    if client_id_int is not None:
+        clients = update_clients(clients = clients,
+                                 client_id = client_id_int)
+        save_clients_dict(clients_dict = [client.__dict__ for client in clients],
+                          key = key)
+    if filtered:
+        global_filter(clients = clients,
+                      filter_str = filter_key)
+
+
+def client_remove(clients: list[SSHClient],
+                  client_id: str) -> list[SSHClient]:
+    '''
+        Removes client
+
+        Args:
+            clients: list[SSHClient]
+            client_id: str
+    '''
+    for i, client in enumerate(clients):
+        if client.client_id == client_id:
+            client_rm: SSHClient = client
+            clients.pop(i)
+            print_and_sleep(content = f"Client {client_rm.user}@{client_rm.host} removed.")
+            break
+    return clients
 
 
 def command_remove(commands: str,
@@ -478,24 +635,65 @@ def command_remove(commands: str,
             key: str
     '''
     input_split: list[str] = commands.split(" ")
+    shown_clients: list[SSHClient] = filtered_clients or get_clients(key = key)
+    clients: list[SSHClient] = get_clients(key = key)
     client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
-    try:
-        client_id_int: int = int(client_id)
-        data: dict = read_encrypted_json(file_path = data_path,
-                                        password = key)
-        clients: list[dict] = data["clients"]
-        if 0 < client_id_int <= len(clients):
-            confirm: str = input("Are you sure you want to remove this client? (y/N): ")
-            if confirm.lower() == "y":
-                clients.pop(client_id_int - 1)
-                save_and_encrypt_data(data = data,
-                                      file_path = data_path,
-                                      password = key)
-                print_and_sleep(content = "Client removed successfully.")
+    client_id_int: int | None = get_client_id(clients = shown_clients,
+                                              input_id = client_id)
+    if client_id_int is not None:
+        confirm: str = input("Are you sure you want to remove the client? (y/N): ")
+        if confirm.lower() == "y":
+            clients = client_remove(clients = clients,
+                                    client_id = client_id_int)
+            save_clients_dict(clients_dict = [client.__dict__ for client in clients],
+                              key = key)
         else:
-            print_and_sleep(content = "Invalid client ID.")
-    except ValueError:
-        print_and_sleep(content = "Invalid client ID.")
+            print_and_sleep(content = "Client removal cancelled.")
+        if filtered_clients:
+            filter_clients(clients = clients,
+                           filter_text = filter_key)
+
+
+def favoutite_client(clients: list[SSHClient],
+                     client_id: str) -> list[SSHClient]:
+    '''
+        Favorites client
+
+        Args:
+            clients: list[SSHClient]
+            client_id: str
+    '''
+    for client in clients:
+        if client.client_id == client_id:
+            client.favorite = not client.favorite
+            print_and_sleep(f"Client {client.user}@{client.host} {'favorited' if client.favorite else 'unfavorited'}.") # pylint: disable=line-too-long
+            break
+    return clients
+
+
+def command_favorite(commands: str,
+                     key: str) -> None:
+    '''
+        Favorites client
+
+        Args:
+            commands: str
+            key: str
+    '''
+    input_split: list[str] = commands.split(" ")
+    shown_clients: list[SSHClient] = filtered_clients or get_clients(key = key)
+    clients: list[SSHClient] = get_clients(key = key)
+    client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
+    client_id_int: int | None = get_client_id(clients = shown_clients,
+                                              input_id = client_id)
+    if client_id_int is not None:
+        clients = favoutite_client(clients = clients,
+                                   client_id = client_id_int)
+        save_clients_dict(clients_dict = [client.__dict__ for client in clients],
+                          key = key)
+        if filtered_clients:
+            global_filter(clients = clients,
+                          filter_str = filter_key)
 
 
 def command_password(command: str,
@@ -546,6 +744,9 @@ def command_handle(command: str,
         case _ if command.lower().startswith("filter") or command.lower().split(" ")[0] == "f":
             command_filter(commands = command,
                            key = key)
+        # unfilter
+        case _ if command in ["unfilter", "u"]:
+            command_unfilter()
         # add
         case _ if command in ["add", "a"]:
             command_add(key = key)
@@ -557,6 +758,10 @@ def command_handle(command: str,
         case _ if command.lower().startswith("remove") or command.lower().split(" ")[0] == "r":
             command_remove(commands = command,
                            key = key)
+        # favorite
+        case _ if command.lower().startswith("favorite") or command.lower().split(" ")[0] == "fav":
+            command_favorite(commands = command,
+                             key = key)
         # password
         case _ if command.lower().startswith("password") or command.lower().split(" ")[0] == "p":
             command_password(command = command,
@@ -569,25 +774,84 @@ def command_handle(command: str,
         case _:
             print_and_sleep(content = "Invalid command.")
 
-filtered_clients: list[SSHClient] = []
-filtered: bool = False
+
+def print_first_run() -> None:
+    '''
+        Prints first run text
+    '''
+    if not os.path.exists(data_path):
+        text: str = "Welcome to SSH Manager!"
+        text += "\nPlase provide a decryption key (password)."
+        text += "\nYou can change the password later!"
+        print(text)
+        global first_run # pylint: disable=global-statement
+        first_run = False
+
+
+def print_clients(key: str | None) -> None:
+    '''
+        Prints clients
+
+        Args:
+            key: str
+            clients: list[SSHClient] | None
+    '''
+    clients: list[SSHClient] = []
+    if filtered:
+        clients = filtered_clients
+    else:
+        clients: list[SSHClient] = clients or get_clients(key = key)
+    table_data: list[list[str]] = [[i + 1,
+                                    c.host + (f" {terminal_yellow("*")}" if c.favorite else ""),
+                                    c.user,
+                                    c.port] for i, c in enumerate(clients)]
+    clear_terminal()
+    print("SSH Manager")
+    ssh_table: str = tabulate(table_data,
+                                headers = ["#",
+                                            "Host",
+                                            "User",
+                                            "Port"],
+                                tablefmt = "simple_grid")
+    ssh_table += f"\n{get_filter()}"
+    command_data: list[list[str]] = [["Connect (c)", "Connects to client"],
+                                     ["Add (a)", "Adds new client"],
+                                     ["Edit (e)", "Edits client"],
+                                     ["Remove (r)", "Removes client"],
+                                     ["Filter (f)", "Filters clients"],
+                                     ["Favorite (fav)", "Favorites client"],
+                                     ["Password (p)", "Changes password"],
+                                     ["Exit (CTRL+C)", "Exits SSH Manager"]]
+    commands_table: str = tabulate(command_data,
+                                    headers = ["Command",
+                                                "Description"])
+    grid: list[list[str]] = [[ssh_table,
+                                commands_table]]
+    print(tabulate(grid,
+                    headers = ["SSH Clients",
+                                "Commands"],
+                    tablefmt = "simple_grid"))
+
+
+def print_home(key: str) -> None:
+    '''
+        Prints home
+    '''
+    print_clients(key = key)
+
 
 def ssh_man() -> None:
     '''
         SSH Manager
     '''
-    return_value: any = None
+    if first_run:
+        print_first_run()
     decrypt_key: str | None = getpass("Enter decryption key: ")
     create_env(decrypt_key)
     while True:
         try:
-            print_clients(key = decrypt_key,
-                          clients = filtered_clients or return_value)
-            if filtered:
-                print(terminal_red("↑ FILTERED"))
-            print("Commands: connect (c), filter (f), add (a), edit (e), remove (r), password (p), exit") # pylint: disable=line-too-long
-            user_input: str = input("> ")
-            command_handle(command = user_input,
+            print_home(key = decrypt_key)
+            command_handle(command = input("> "),
                            key = decrypt_key)
         except KeyboardInterrupt:
             print("\nBye!")
