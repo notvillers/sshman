@@ -46,7 +46,7 @@ def get_uuid() -> str:
     return str(uuid4())
 
 
-@dataclass
+@dataclass(slots = True)
 class SSHClient:
     '''
         SSH Client dataclass
