@@ -45,8 +45,9 @@ def get_uuid() -> str:
     '''
     return str(uuid4())
 
-
-@dataclass(slots = True)
+#TODO: keygen remove
+#TODO: enable fingerprint
+@dataclass()
 class SSHClient:
     '''
         SSH Client dataclass
@@ -54,7 +55,7 @@ class SSHClient:
     host: str
     user: str
     password: str
-    port: int = DEFAULT_PORT
+    port: int = field(default = DEFAULT_PORT)
     favorite: bool = False
     client_id: str = field(default_factory = get_uuid)
 
