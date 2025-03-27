@@ -47,6 +47,7 @@ def get_uuid() -> str:
 
 #TODO: keygen remove
 #TODO: enable fingerprint
+#TODO: handling too small terminal size
 @dataclass()
 class SSHClient:
     '''
