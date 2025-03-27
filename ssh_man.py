@@ -47,7 +47,7 @@ def get_uuid() -> str:
 
 #TODO: keygen remove
 #TODO: enable fingerprint
-#TODO: handling too small terminal size
+#TODO: handling too small terminal size (min. width: 96)
 @dataclass()
 class SSHClient:
     '''
@@ -827,6 +827,20 @@ def print_first_run() -> None:
         print(text)
         global first_run # pylint: disable=global-statement
         first_run = False
+
+
+def terminal_width() -> int:
+    '''
+        Terminal width
+    '''
+    return os.get_terminal_size().columns
+
+
+def small_render() -> bool:
+    '''
+        Small render
+    '''
+    return terminal_width() < 96
 
 
 def print_clients(key: str | None) -> None:
