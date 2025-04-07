@@ -792,7 +792,7 @@ def command_handle(command: str,
             command_edit(commands = command,
                          key = key)
         # remove
-        case _ if command.lower().startswith("remove") or command.lower().split(" ")[0] == "r":
+        case _ if command.lower().startswith("remove") or command.lower().split(" ")[0] == "rm":
             command_remove(commands = command,
                            key = key)
         # favorite
@@ -872,7 +872,7 @@ def print_clients(key: str | None) -> None:
     command_data: list[list[str]] = [["Connect (c)", "Connects to client"],
                                      ["Add (a)", "Adds new client"],
                                      ["Edit (e)", "Edits client"],
-                                     ["Remove (r)", "Removes client"],
+                                     ["Remove (rm)", "Removes client"],
                                      ["Filter (f)", "Filters clients"],
                                      ["Favorite (fav)", f"Favorites client {terminal_yellow('*')}"],
                                      ["Password (p)", "Changes password"],
