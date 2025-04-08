@@ -4,9 +4,9 @@
 
 import os
 from dataclasses import dataclass, field
+from tabulate import tabulate
 from src.classes.ssh_client import SshClient
 from src.classes.commands import Command
-from tabulate import tabulate
 
 def clear_terminal() -> None:
     '''

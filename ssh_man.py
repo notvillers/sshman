@@ -15,6 +15,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Protocol.KDF import scrypt
 from tabulate import tabulate
+from src import kb_input as kb_i
 
 first_run: bool = True
 path: str = os.path.abspath(os.path.dirname(__file__))
@@ -907,8 +908,10 @@ def ssh_man() -> None:
     while True:
         try:
             print_home(key = decrypt_key)
-            command_handle(command = input("> "),
-                           key = decrypt_key)
+            kb_input: str | None = kb_i.get_input()
+            if kb_input:
+                command_handle(command = kb_input,
+                               key = decrypt_key)
         except KeyboardInterrupt:
             print("\nBye!")
             sys_exit(0)
