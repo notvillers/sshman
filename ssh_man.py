@@ -25,6 +25,24 @@ DEFAULT_DATA_DICT: dict = {"clients": []}
 DEFAULT_PORT: int = 22
 SLEEP_TIMER: float = 1.5
 
+log_dir: str = os.path.join(path,
+                            "log")
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+def err_log(content: str) -> None:
+    '''
+        Logs error
+
+        :param content: :class:`str`
+    '''
+    with open(file = os.path.join(log_dir,
+                                  "err.log"),
+              mode = "a",
+              encoding = "utf-8-sig") as f:
+        f.write(f"{content}\n")
+
+
 class SshManException(Exception):
     '''
         SSH Manager Exception
@@ -34,15 +52,14 @@ class SshManException(Exception):
         '''
             SSH Manager Exception
 
-            Args:
-                message: str
+            :param message: :class:`str`
         '''
         super().__init__(message)
 
 
 def get_uuid() -> str:
     '''
-        Gets UUID
+        Returns UUID
     '''
     return str(uuid4())
 
@@ -67,12 +84,16 @@ class SSHClient:
         '''
         try:
             print(f"Connecting to {self.user}@{self.host}...")
-            run(f"sshpass -p {self.password} ssh -p {self.port} {self.user}@{self.host}", # pylint: disable=subprocess-run-check
-                shell = True)
+            if self.password:
+                run(f"sshpass -p {self.password} ssh -p {self.port} {self.user}@{self.host}", # pylint: disable=subprocess-run-check
+                    shell = True)
+            else:
+                run(f"ssh {self.user}@{self.host} -p {self.port}", # pylint: disable=subprocess-run-check
+                    shell = True)
             sleep(SLEEP_TIMER)
         except Exception as e: # pylint: disable=broad-exception-caught
-            print(f"Error: {e}")
-            sleep(SLEEP_TIMER)
+            err_log(content = f"Error: {e}")
+            sleep(SLEEP_TIMER * 2)
 
 
 filtered_clients: list[SSHClient] = []
@@ -92,8 +113,7 @@ def terminal_red(text: str) -> str:
     '''
         Terminal red text
 
-        Args:
-            text: str
+        :param text: :class:`str`
     '''
     return f"\033[91m{text}\033[0m"
 
@@ -102,8 +122,7 @@ def terminal_yellow(text: str) -> str:
     '''
         Terminal yellow text
 
-        Args:
-            text: str
+        :param text: :class:`str`
     '''
     return f"\033[93m{text}\033[0m"
 
@@ -114,9 +133,9 @@ def dict_to_json(data: dict,
     '''
         Converts dictionary to JSON
 
-        Args:
-            data: dict
-            data_path: str
+        :param data: :class:`dict`
+        :param file_path: :class:`str`
+        :param encoding: :class:`str` defaults to `"utf-8-sig"`
     '''
     with open(file_path,
               "w",
@@ -132,10 +151,9 @@ def encrypt_data(file_path: str,
     '''
         Encrypts file data
 
-        Args:
-            file_path: str
-            password: str
-            encoding: str
+        :param file_path: :class:`str`
+        :param passward: :class:`str`
+        :param encoding: :class:`str`
     '''
     salt: bytes = os.urandom(16)
     key: bytes | Tuple[bytes] = scrypt(password = password.encode(),
@@ -167,10 +185,9 @@ def decrypt_data(file_path: str,
     '''
         Decrypts file data
 
-        Args:
-            data_path: str
-            password: str
-            encoding: str
+        :param data_path: :class:`str`
+        :param password: :class:`str`
+        :param encoding: :class:`str` defaults to `"utf-8-sig"`
     '''
     with open(file_path,
               "rb") as file:
@@ -197,8 +214,7 @@ def json_str_to_dict(data: str) -> dict:
     '''
         Converts JSON string to dictionary
 
-        Args:
-            data: str
+        :param data: :class:`str`
     '''
     return json.loads(data)
 
@@ -209,10 +225,9 @@ def save_and_encrypt_data(data: dict,
     '''
         Saves and encrypts data
 
-        Args:
-            data: dict
-            file_path: str
-            password: str
+        :param data: :class:`str`
+        :param file_path: :class:`str`
+        :param password: :class:`strű
     '''
     dict_to_json(data = data,
                  file_path = file_path)
@@ -239,9 +254,8 @@ def read_encrypted_json(file_path: str,
     '''
         Reads encrypted JSON file
 
-        Args:
-            file_path: str
-            password: str
+        :param file_path: :class:`str`
+        :param password: :class:`str`
     '''
     return json_str_to_dict(decrypt_data(file_path,
                                          password))
@@ -251,13 +265,12 @@ def client_from_data(client_data: dict) -> SSHClient:
     '''
         Creates SSHClient object from data
 
-        Args:
-            client_data: dict
+        :param client_data: :class:`str`
     '''
     return SSHClient(client_id = client_data["client_id"],
                      host = client_data["host"],
                      user = client_data["user"],
-                     password = client_data["password"],
+                     password = client_data.get("password", ""),
                      port = client_data["port"],
                      favorite = client_data["favorite"] if "favorite" in client_data else False)
 
@@ -266,8 +279,7 @@ def clients_from_data(client_datas: list[dict]) -> list[SSHClient]:
     '''
         Creates SSHClient objects from data
 
-        Args:
-            client_datas: list[dict]
+        :param: client_data: :class:`list[dict]`
     '''
     return [client_from_data(client_data) for client_data in client_datas]
 
@@ -276,8 +288,7 @@ def get_clients(key: str) -> list[SSHClient]:
     '''
         Gets clients
 
-        Args:
-            key: str
+        :param key: :class:`str`
     '''
     try:
         data: dict = read_encrypted_json(file_path = data_path,
@@ -292,8 +303,7 @@ def current_clients(key: str) -> list[SSHClient]:
     '''
         Current clients
 
-        Args:
-            key: str
+        :param key: :class:`str`
     '''
     if filtered:
         return filtered_clients
@@ -305,9 +315,8 @@ def get_client_id(clients: list[SSHClient],
     '''
         Gets client ID
 
-        Args:
-            clients: list[SSHClient]
-            filter: str | int
+        :param clients: :class:`list[SSHCLient]`
+        :param filter: :class:`Union(str, int)`
     '''
     if input_id.isdigit():
         input_id_int: int = int(input_id)
@@ -331,9 +340,8 @@ def get_client_by_client_id(clients: list[SSHClient],
     '''
         Gets client by client ID
 
-        Args:
-            clients: list[SSHClient]
-            client_id: int
+        :param clients: :class:`list[SSHClients]`
+        :param client_id: :class:`int`
     '''
     for client in clients:
         if client.client_id == client_id:
@@ -358,9 +366,8 @@ def print_and_sleep(content: str = "",
     '''
         Prints content and sleeps
 
-        Args:
-            content: str
-            sleep_timer: int
+        :param content: :class:`str`
+        :param sleep_timer: :class:`int`
     '''
     print(content)
     sleep(sleep_timer)
@@ -371,9 +378,8 @@ def find_client(search: str,
     '''
         Finds clients
 
-        Args:
-            search: str
-            key: str
+        :param search: :class:`str`
+        :param key: :class:`str`
     '''
     clients: list[SSHClient] = get_clients(key = key)
     if search.isdigit():
@@ -404,8 +410,7 @@ def get_clients_dict(key: str) -> list[dict]:
     '''
         Gets clients dictionary
 
-        Args:
-            key: str
+        :param key: :class:`str`
     '''
     clients_dict: dict = [client.__dict__ for client in get_clients(key = key)]
     return sorted(clients_dict,
@@ -417,9 +422,8 @@ def save_clients_dict(clients_dict: list[dict],
     '''
         Saves clients dictionary
 
-        Args:
-            clients_dict: list[dict]
-            key: str
+        :param clients_dict: :class:`list[dict]`
+        :param key: :class:`str`
     '''
     data: dict = read_encrypted_json(file_path = data_path,
                                      password = key)
@@ -434,9 +438,8 @@ def command_connect(command: str,
     '''
         Connects to client
 
-        Args:
-            command: str
-            key: str
+        :param command: :class`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = command.split(" ")
     search: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
@@ -451,9 +454,8 @@ def filter_clients(clients: list[SSHClient],
     '''
         Filters clients
 
-        Args:
-            clients: list[SSHClient]
-            filter: str
+        :param clients: :class:`list[SSHClient]`
+        :param filter: :class:`str`
     '''
     filtereds: list[SSHClient] = []
     for client in clients:
@@ -467,8 +469,8 @@ def global_filter(clients: list[SSHClient] | None = None,
     '''
         Global filter
 
-        Args:
-            client: list[SSHClient] | None (default None)
+        :param clients: :class:`list[SSHClient]`
+        :param filter_str: :class:`str`
     '''
     global filtered_clients # pylint: disable=global-statement
     global filtered # pylint: disable=global-statement
@@ -487,8 +489,7 @@ def global_filter_info(text: str | None = None) -> None:
     '''
         Global filter info
 
-        Args:
-            text: str | None
+        :param text: :class:`str`
     '''
     global filter_info # pylint: disable=global-statement
     filter_info = text
@@ -499,9 +500,8 @@ def command_filter(commands: str,
     '''
         Filters clients
 
-        Args:
-            commands: str
-            key: str
+        :param commands: :class:`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = commands.split(" ")
     filter_text: str = input("Filter: ") if len(input_split) == 1 else input_split[1]
@@ -532,16 +532,16 @@ def command_add(key = str) -> None:
     '''
         Adds client
 
-        Args:
-            key: str
+        :param key: :class:`str`
     '''
     host: str = input("Enter host: ")
     user: str = input("Enter user: ")
     password: str = getpass("Enter password: ")
     port: int = input(f"Enter port (default {DEFAULT_PORT}): ")
     if not host or not user or not password:
-        print_and_sleep(content = "Host, user and password are required.")
-        return
+        if not host or not user:
+            print_and_sleep(content = "Host and user are required.")
+            return
     new_client: SSHClient = SSHClient(host = host,
                                       user = user,
                                       password = password,
@@ -560,8 +560,7 @@ def update_client(client: SSHClient) -> SSHClient:
     '''
         Updates client
 
-        Args:
-            client: SSHClient
+        :param client: :class:`SSHClient`
     '''
     client.host = input(f"Enter host ({client.host}): ") or client.host
     client.user = input(f"Enter user ({client.user}): ") or client.user
@@ -575,9 +574,8 @@ def update_clients(clients: list[SSHClient],
     '''
         Updates client
 
-        Args:
-            clients: list[SSHClient]
-            client_id: str
+        :param clients: :class:`list[SSHClient]`
+        :param client_id: :class:`str`
     '''
     for client in clients:
         if client.client_id == client_id:
@@ -591,9 +589,8 @@ def command_edit(commands: str,
     '''
         Edits client
 
-        Args:
-            commands: str
-            key: str
+        :param commands: :class:`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = commands.split(" ")
     client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
@@ -615,9 +612,8 @@ def client_remove(clients: list[SSHClient],
     '''
         Removes client
 
-        Args:
-            clients: list[SSHClient]
-            client_id: str
+        :param clients: :class:`list[SSHClient]`
+        :param :class:`str`
     '''
     for i, client in enumerate(clients):
         if client.client_id == client_id:
@@ -633,9 +629,8 @@ def command_remove(commands: str,
     '''
         Removes client
 
-        Args:
-            commands: str
-            key: str
+        :param commans: :class:`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = commands.split(" ")
     shown_clients: list[SSHClient] = filtered_clients or get_clients(key = key)
@@ -662,9 +657,8 @@ def favoutite_client(clients: list[SSHClient],
     '''
         Favorites client
 
-        Args:
-            clients: list[SSHClient]
-            client_id: str
+        :param clients: :class:`list[SSHClient]`
+        :param client_id: :class:`str`
     '''
     for client in clients:
         if client.client_id == client_id:
@@ -679,9 +673,8 @@ def command_favorite(commands: str,
     '''
         Favorites client
 
-        Args:
-            commands: str
-            key: str
+        :param commands: :class:`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = commands.split(" ")
     shown_clients: list[SSHClient] = filtered_clients or get_clients(key = key)
@@ -704,9 +697,8 @@ def command_password(command: str,
     '''
         Change password on encrypted file
 
-        Args:
-            command: str
-            key: str
+        :param command: :class:`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = command.split(" ")
     old_pw: str = getpass("Enter old password: ") if len(input_split) < 3 else input_split[1]
@@ -738,9 +730,8 @@ def command_export(command: str,
     '''
         Exports clients
 
-        Args:
-            command: str
-            key: str
+        :param command: :class:`str`
+        :param key: :class:`str`
     '''
     input_split: list[str] = command.split(" ")
     password: str = getpass("Enter password: ") if len(input_split) == 1 else input_split[1]
@@ -772,6 +763,9 @@ def command_handle(command: str,
                    key: str) -> None:
     '''
         Handles commands
+
+        :param command: :class:`str`
+        :param key: :class:`str`
     '''
     match command.lower():
         # connect
@@ -848,9 +842,7 @@ def print_clients(key: str | None) -> None:
     '''
         Prints clients
 
-        Args:
-            key: str
-            clients: list[SSHClient] | None
+        :param key: :class:`str`
     '''
     clients: list[SSHClient] = []
     if filtered:
@@ -893,6 +885,8 @@ def print_clients(key: str | None) -> None:
 def print_home(key: str) -> None:
     '''
         Prints home
+
+        :param key: :class:`str`
     '''
     print_clients(key = key)
 
