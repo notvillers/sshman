@@ -82,6 +82,7 @@ class SSHClient:
         '''
             Connect to SSH client
         '''
+        clear_terminal()
         try:
             print(f"Connecting to {self.user}@{self.host}...")
             if self.password:
