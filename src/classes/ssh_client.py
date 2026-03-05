@@ -55,3 +55,9 @@ class SshClient:
                 shell = True, check = True) # pylint: pylint: disable=subprocess-run-check
         except Exception as e: # pylint: disable=broad-exception-caught
             print(f"Error: {e}")
+
+    def ssh_format(self) -> str:
+        '''
+            Returns SSH format `<user>@<host>:<port>`
+        '''
+        return f"{self.user}@{self.host}:{self.port}"

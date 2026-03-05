@@ -36,6 +36,15 @@ def terminal_yellow(text: str) -> str:
     return f"\033[93m{text}\033[0m"
 
 
+def terminal_purple(text: str) -> str:
+    '''
+        Returns purple text
+
+        :param text: :class:`str`
+    '''
+    return f"\033[95m{text}\033[0m"
+
+
 def get_terminal_width() -> int:
     '''
         Get the terminal width
@@ -134,8 +143,8 @@ class TerminalRender:
     '''
     width: int = field(default_factory = get_terminal_width)
     title: str = "SSH Client Manager"
-    clients: list[SshClient] = []
-    commands: list[Command] = []
+    clients: list[SshClient] = field(default_factory = [])
+    commands: list[Command] = field(default_factory = [])
 
     def __init__(self) -> None:
         self.clients = sort_clients(self.clients)

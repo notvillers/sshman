@@ -16,6 +16,8 @@ from Crypto.Util.Padding import pad, unpad
 from Crypto.Protocol.KDF import scrypt
 from tabulate import tabulate
 from src import kb_input as kb_i
+from src.classes.terminal_render import (clear_terminal,
+                                         terminal_red, terminal_yellow, terminal_purple)
 
 first_run: bool = True
 path: str = os.path.abspath(os.path.dirname(__file__))
@@ -63,6 +65,7 @@ def get_uuid() -> str:
     '''
     return str(uuid4())
 
+
 #TODO: keygen remove
 #TODO: enable fingerprint
 #TODO: handling too small terminal size (min. width: 96)
@@ -82,9 +85,8 @@ class SSHClient:
         '''
             Connect to SSH client
         '''
-        clear_terminal()
         try:
-            print(f"Connecting to {self.user}@{self.host}...")
+            print(terminal_purple(text = f"Connecting to {self.user}@{self.host}..."))
             if self.password:
                 run(f"sshpass -p {self.password} ssh -p {self.port} {self.user}@{self.host}", # pylint: disable=subprocess-run-check
                     shell = True)
@@ -95,38 +97,20 @@ class SSHClient:
         except Exception as e: # pylint: disable=broad-exception-caught
             err_log(content = f"Error: {e}")
             sleep(SLEEP_TIMER * 2)
+        clear_terminal()
+
+
+    def ssh_format(self) -> str:
+        '''
+            Returns SSH format `<user>@<host>:<port>`
+        '''
+        return f"{self.user}@{self.host}:{self.port}"
 
 
 filtered_clients: list[SSHClient] = []
 filter_key: str | None = None
 filtered: bool = False
 filter_info: str | None = None
-
-def clear_terminal() -> None:
-    '''
-        Clears terminal
-    '''
-    print("\033[H\033[J",
-          end = "")
-
-
-def terminal_red(text: str) -> str:
-    '''
-        Terminal red text
-
-        :param text: :class:`str`
-    '''
-    return f"\033[91m{text}\033[0m"
-
-
-def terminal_yellow(text: str) -> str:
-    '''
-        Terminal yellow text
-
-        :param text: :class:`str`
-    '''
-    return f"\033[93m{text}\033[0m"
-
 
 def dict_to_json(data: dict,
                  file_path: str,
@@ -138,8 +122,8 @@ def dict_to_json(data: dict,
         :param file_path: :class:`str`
         :param encoding: :class:`str` defaults to `"utf-8-sig"`
     '''
-    with open(file_path,
-              "w",
+    with open(file = file_path,
+              mode = "w",
               encoding = encoding) as file:
         json.dump(data,
                   file,
@@ -165,8 +149,8 @@ def encrypt_data(file_path: str,
                                        p = 1)
     cipher: AES = AES.new(key,
                           AES.MODE_CBC)
-    with open(file_path,
-              "r",
+    with open(file = file_path,
+              mode = "r",
               encoding = encoding) as file:
         data: str = file.read()
     padded_data: bytes = pad(data.encode(),
@@ -190,8 +174,8 @@ def decrypt_data(file_path: str,
         :param password: :class:`str`
         :param encoding: :class:`str` defaults to `"utf-8-sig"`
     '''
-    with open(file_path,
-              "rb") as file:
+    with open(file = file_path,
+              mode = "rb") as file:
         encrypted_string: str = file.read()
     encrypted_content: bytes = base64.b64decode(encrypted_string)
     salt: bytes = encrypted_content[:16]
@@ -374,36 +358,49 @@ def print_and_sleep(content: str = "",
     sleep(sleep_timer)
 
 
-def find_client(search: str,
-                key: str) -> SSHClient | None:
+def find_client_2(search: str,
+                  key: str) -> str | None:
     '''
-        Finds clients
+        Return specified uuid for client if only one found
 
         :param search: :class:`str`
         :param key: :class:`str`
     '''
     clients: list[SSHClient] = get_clients(key = key)
+    f_clients: list[SSHClient] = filtered_clients or clients
+    found_clients: list[SSHClient] = []
     if search.isdigit():
         try:
             index: int = int(search) - 1
-            if 0 <= index < len(clients):
-                return clients[index]
+            if 0 <= index <= len(f_clients):
+                return f_clients[index].client_id
         except ValueError:
-            print_and_sleep(content = "Invalid client ID.")
-    else:
-        found_clients: list[SSHClient] | None = []
-        for client in clients:
-            if search in f"{client.user}@{client.host}:{client.port}":
-                found_clients.append(client)
-        if len(found_clients) == 1:
-            return found_clients[0]
-        elif len(found_clients) > 1:
-            print("Multiple clients found:")
-            for i, client in enumerate(found_clients):
-                print(f"{i + 1}. {client.user}@{client.host}:{client.port}")
-            print("Please use client ID or be more specific.")
-            sleep(2)
-            return None
+            print_and_sleep(content = f"Invalid client ID: '{str(search)}'")
+    for client in f_clients:
+        if search.lower() in client.ssh_format().lower():
+            found_clients.append(client)
+    if len(found_clients) == 1:
+        return found_clients[0].client_id
+    if len(found_clients) > 1:
+        print("Multiple clients found:")
+        for i, client in enumerate(found_clients):
+            print(f"{i + 1}. {client.ssh_format()}")
+        print("Please use client ID or be more specific.")
+        sleep(2)
+    return None
+
+
+def get_client_by_uuid(client_id: str,
+                       key: str) -> SSHClient | None:
+    '''
+        Get client by `client_id`
+
+        :param client_id: :class:`str`
+        :param key: :class:`str`
+    '''
+    for client in get_clients(key = key):
+        if client.client_id == client_id:
+            return client
     return None
 
 
@@ -444,8 +441,10 @@ def command_connect(command: str,
     '''
     input_split: list[str] = command.split(" ")
     search: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
-    client: SSHClient | None = find_client(search = search,
-                                           key = key)
+    client_id: str | None = find_client_2(search = search,
+                                          key = key)
+    client: SSHClient | None = get_client_by_uuid(client_id = client_id,
+                                                  key = key)
     if client:
         client.connect()
 
@@ -460,7 +459,7 @@ def filter_clients(clients: list[SSHClient],
     '''
     filtereds: list[SSHClient] = []
     for client in clients:
-        if filter_text in f"{client.host}{client.user}{client.port}".lower():
+        if filter_text.lower() in f"{client.host}{client.user}{client.port}".lower():
             filtereds.append(client)
     return filtereds
 
@@ -597,7 +596,7 @@ def command_edit(commands: str,
     client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
     clients: list[SSHClient] = get_clients(key = key)
     client_id_int: int | None = get_client_id(clients = clients,
-                                                  input_id = client_id)
+                                              input_id = client_id)
     if client_id_int is not None:
         clients = update_clients(clients = clients,
                                  client_id = client_id_int)
@@ -625,35 +624,54 @@ def client_remove(clients: list[SSHClient],
     return clients
 
 
-def command_remove(commands: str,
-                   key: str) -> None:
+# TODO: New remove method
+def client_remove_2(search: str,
+                    key: str) -> list[SSHClient]:
+    '''
+        Removes client by `client_id`
+
+        :param client_id: :class:`str`
+        :param key: :class:`str`
+    '''
+    client_id: str | None = find_client_2(search = search,
+                                          key = key)
+    if client_id:
+        popped: bool = False
+        clients: list[SSHClient] = get_clients(key = key)
+        for i, client in enumerate(clients):
+            if client.client_id == client_id:
+                client_to_rm: SSHClient = client
+                if input(f"Are you sure want to remove '{client_to_rm.ssh_format()}'?\n(y/N) ").lower() in ["y", # pylint: disable=line-too-long
+                                                                                                            "yes"]: # pylint: disable=line-too-long
+                    clients.pop(i)
+                    popped = True
+                    print_and_sleep(content = f"Client '{client_to_rm.ssh_format()}' removed.")
+                else:
+                    print_and_sleep(content = f"Removing of '{client_to_rm.ssh_format()}' cancelled.") # pylint: disable=line-too-long
+                break
+        if popped:
+            save_clients_dict(clients_dict = [c.__dict__ for c in clients],
+                              key = key)
+            if filtered:
+                global_filter(clients = clients,
+                              filter_str = filter_key)
+
+
+def command_remove_2(commands: str,
+                     key: str) -> None:
     '''
         Removes client
 
         :param commans: :class:`str`
         :param key: :class:`str`
     '''
-    input_split: list[str] = commands.split(" ")
-    shown_clients: list[SSHClient] = filtered_clients or get_clients(key = key)
-    clients: list[SSHClient] = get_clients(key = key)
-    client_id: str = input("Client ID: ") if len(input_split) == 1 else input_split[1]
-    client_id_int: int | None = get_client_id(clients = shown_clients,
-                                              input_id = client_id)
-    if client_id_int is not None:
-        confirm: str = input("Are you sure you want to remove the client? (y/N): ")
-        if confirm.lower() == "y":
-            clients = client_remove(clients = clients,
-                                    client_id = client_id_int)
-            save_clients_dict(clients_dict = [client.__dict__ for client in clients],
-                              key = key)
-        else:
-            print_and_sleep(content = "Client removal cancelled.")
-        if filtered_clients:
-            filter_clients(clients = clients,
-                           filter_text = filter_key)
+    command_split: list[str] = commands.split(" ")
+    search: str = input("Client to delete: ") if len(command_split) == 1 else command_split[1]
+    client_remove_2(search = search,
+                    key = key)
 
 
-def favoutite_client(clients: list[SSHClient],
+def favourite_client(clients: list[SSHClient],
                      client_id: str) -> list[SSHClient]:
     '''
         Favorites client
@@ -684,7 +702,7 @@ def command_favorite(commands: str,
     client_id_int: int | None = get_client_id(clients = shown_clients,
                                               input_id = client_id)
     if client_id_int is not None:
-        clients = favoutite_client(clients = clients,
+        clients = favourite_client(clients = clients,
                                    client_id = client_id_int)
         save_clients_dict(clients_dict = [client.__dict__ for client in clients],
                           key = key)
@@ -789,7 +807,7 @@ def command_handle(command: str,
                          key = key)
         # remove
         case _ if command.lower().startswith("remove") or command.lower().split(" ")[0] == "rm":
-            command_remove(commands = command,
+            command_remove_2(commands = command,
                            key = key)
         # favorite
         case _ if command.lower().startswith("favorite") or command.lower().split(" ")[0] == "fav":
