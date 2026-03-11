@@ -25,7 +25,7 @@ data_path: str = os.path.join(path,
                               "data.aes")
 DEFAULT_DATA_DICT: dict = {"clients": []}
 DEFAULT_PORT: int = 22
-SLEEP_TIMER: float = 1.5
+SLEEP_TIMER: float = 1
 
 log_dir: str = os.path.join(path,
                             "log")
@@ -66,9 +66,10 @@ def get_uuid() -> str:
     return str(uuid4())
 
 
-#TODO: keygen remove
-#TODO: enable fingerprint
-#TODO: handling too small terminal size (min. width: 96)
+# TODO: keygen remove
+# TODO: enable fingerprint
+# TODO: handling too small terminal size (min. width: 96)
+# TODO: Settings (ex. sleep timer)
 @dataclass()
 class SSHClient:
     '''
