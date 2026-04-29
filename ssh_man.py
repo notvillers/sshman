@@ -642,13 +642,15 @@ def client_remove_2(search: str,
         for i, client in enumerate(clients):
             if client.client_id == client_id:
                 client_to_rm: SSHClient = client
-                if input(f"Are you sure want to remove '{client_to_rm.ssh_format()}'?\n(y/N) ").lower() in ["y", # pylint: disable=line-too-long
-                                                                                                            "yes"]: # pylint: disable=line-too-long
+                ssh_form: str = client_to_rm.ssh_format()
+                input_reponse: str = input(f"Are you sure want to remove '{ssh_form}'?\n(y/N)")
+                if input_reponse.lower() in ["y",
+                                             "yes"]:
                     clients.pop(i)
                     popped = True
-                    print_and_sleep(content = f"Client '{client_to_rm.ssh_format()}' removed.")
+                    print_and_sleep(content = f"Client '{ssh_form}' removed.")
                 else:
-                    print_and_sleep(content = f"Removing of '{client_to_rm.ssh_format()}' cancelled.") # pylint: disable=line-too-long
+                    print_and_sleep(content = f"Removing of '{ssh_form}' cancelled.")
                 break
         if popped:
             save_clients_dict(clients_dict = [c.__dict__ for c in clients],
