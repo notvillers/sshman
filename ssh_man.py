@@ -158,7 +158,7 @@ def encrypt_data(file_path: str,
                              AES.block_size)
     encrypted_data = cipher.encrypt(padded_data)
     encrypted_content = salt + cipher.iv + encrypted_data
-    encrypted_string = base64.b64encode(encrypted_content).decode(encoding)
+    encrypted_string: str = base64.b64encode(encrypted_content).decode(encoding)
     with open(file_path,
               "w",
               encoding = encoding) as file:
@@ -537,7 +537,8 @@ def command_add(key = str) -> None:
     '''
     host: str = input("Enter host: ")
     user: str = input("Enter user: ")
-    password: str = getpass("Enter password: ")
+    password: str = getpass("Enter password: ",
+                            echo_char = "*")
     port: int = input(f"Enter port (default {DEFAULT_PORT}): ")
     if not host or not user or not password:
         if not host or not user:
@@ -565,7 +566,8 @@ def update_client(client: SSHClient) -> SSHClient:
     '''
     client.host = input(f"Enter host ({client.host}): ") or client.host
     client.user = input(f"Enter user ({client.user}): ") or client.user
-    client.password = getpass("Enter password: ") or client.password
+    client.password = getpass("Enter password: ",
+                              echo_char = "*") or client.password
     client.port = input(f"Enter port ({client.port}): ") or client.port
     return client
 
@@ -685,7 +687,9 @@ def favourite_client(clients: list[SSHClient],
     for client in clients:
         if client.client_id == client_id:
             client.favorite = not client.favorite
-            print_and_sleep(f"Client {client.user}@{client.host} {'favorited' if client.favorite else 'unfavorited'}.") # pylint: disable=line-too-long
+            ssh_form: str = client.ssh_format()
+            fav_or_unfav: str = "favorited" if client.favorite else "unfavorited"
+            print_and_sleep(f"Client '{ssh_form}' {fav_or_unfav}.")
             break
     return clients
 
@@ -723,9 +727,12 @@ def command_password(command: str,
         :param key: :class:`str`
     '''
     input_split: list[str] = command.split(" ")
-    old_pw: str = getpass("Enter old password: ") if len(input_split) < 3 else input_split[1]
-    new_pw: str = getpass("Enter new password: ") if len(input_split) < 3 else input_split[2]
-    conf_new_pw: str = getpass("Confirm new password: ") if len(input_split) < 3 else input_split[2]
+    old_pw: str = getpass("Enter old password: ",
+                          echo_char = "*") if len(input_split) < 3 else input_split[1]
+    new_pw: str = getpass("Enter new password: ",
+                          echo_char = "*") if len(input_split) < 3 else input_split[2]
+    conf_new_pw: str = getpass("Confirm new password: ",
+                               echo_char = "*") if len(input_split) < 3 else input_split[2]
     if old_pw and new_pw and conf_new_pw:
         if key == old_pw:
             if new_pw == conf_new_pw:
@@ -756,7 +763,8 @@ def command_export(command: str,
         :param key: :class:`str`
     '''
     input_split: list[str] = command.split(" ")
-    password: str = getpass("Enter password: ") if len(input_split) == 1 else input_split[1]
+    password: str = getpass("Enter password: ",
+                            echo_char = "*") if len(input_split) == 1 else input_split[1]
     file_path: str = input("Enter file path: ") if len(input_split) < 3 else input_split[2]
     confirm: str = input("Are you sure you want to export clients? (y/N): ")
     if not password or not file_path:
@@ -789,13 +797,15 @@ def command_handle(command: str,
         :param command: :class:`str`
         :param key: :class:`str`
     '''
-    match command.lower():
+    cmd_low: str = command.lower()
+    cmd_split_first: str = cmd_low.split(" ")[0]
+    match cmd_low:
         # connect
-        case _ if command.lower().startswith("connect") or command.lower().split(" ")[0] == "c":
+        case _ if cmd_low.startswith("connect") or cmd_split_first == "c":
             command_connect(command = command,
                             key = key)
         # filter
-        case _ if command.lower().startswith("filter") or command.lower().split(" ")[0] == "f":
+        case _ if cmd_low.startswith("filter") or cmd_split_first == "f":
             command_filter(commands = command,
                            key = key)
         # unfilter
@@ -805,23 +815,23 @@ def command_handle(command: str,
         case _ if command in ["add", "a"]:
             command_add(key = key)
         # edit
-        case _ if command.lower().startswith("edit") or command.lower().split(" ")[0] == "e":
+        case _ if cmd_low.startswith("edit") or cmd_split_first == "e":
             command_edit(commands = command,
                          key = key)
         # remove
-        case _ if command.lower().startswith("remove") or command.lower().split(" ")[0] == "rm":
+        case _ if cmd_low.startswith("remove") or cmd_split_first == "rm":
             command_remove_2(commands = command,
                            key = key)
         # favorite
-        case _ if command.lower().startswith("favorite") or command.lower().split(" ")[0] == "fav":
+        case _ if cmd_low.startswith("favorite") or cmd_split_first == "fav":
             command_favorite(commands = command,
                              key = key)
         # password
-        case _ if command.lower().startswith("password") or command.lower().split(" ")[0] == "p":
+        case _ if cmd_low.startswith("password") or cmd_split_first == "p":
             command_password(command = command,
                              key = key)
         # export
-        case _ if command.lower().startswith("export") or command.lower().split(" ")[0] == "exp":
+        case _ if cmd_low.startswith("export") or cmd_split_first == "exp":
             command_export(command = command,
                            key = key)
         # exit
@@ -879,9 +889,9 @@ def print_clients(key: str | None) -> None:
     print("SSH Manager")
     ssh_table: str = tabulate(table_data,
                                 headers = ["#",
-                                            "Host",
-                                            "User",
-                                            "Port"],
+                                           "Host",
+                                           "User",
+                                           "Port"],
                                 tablefmt = "simple_grid")
     ssh_table += f"\n{get_filter()}"
     command_data: list[list[str]] = [["Connect (c)", "Connects to client"],
@@ -894,13 +904,13 @@ def print_clients(key: str | None) -> None:
                                      ["Export (exp)", "Exports to decrypted .json"],
                                      ["Exit (CTRL+C)", "Exits SSH Manager"]]
     commands_table: str = tabulate(command_data,
-                                    headers = ["Command",
-                                               "Description"])
+                                   headers = ["Command",
+                                              "Description"])
     grid: list[list[str]] = [[ssh_table,
-                                commands_table]]
+                              commands_table]]
     print(tabulate(grid,
                     headers = ["SSH Clients",
-                                "Commands"],
+                               "Commands"],
                     tablefmt = "simple_grid"))
 
 
@@ -919,7 +929,8 @@ def ssh_man() -> None:
     '''
     if first_run:
         print_first_run()
-    decrypt_key: str | None = getpass("Enter decryption key: ")
+    decrypt_key: str | None = getpass("Enter decryption key: ",
+                                      echo_char = "*")
     create_env(decrypt_key)
     while True:
         try:
