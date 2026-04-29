@@ -1,7 +1,7 @@
 '''
     Keyboard input module
 '''
-from getkey import getkey, keys
+from readchar import readkey, key
 import src.check_os as c_os
 
 ESCAPE_EVENT: str = "esc"
@@ -32,14 +32,14 @@ def keyboard_event_input(placeholder: str = ">") -> str | None:
           flush = True)
     chars: list[str] = []
     while True:
-        var: str = getkey()
+        var: str = readkey()
         match var:
-            case keys.ESC:
+            case key.ESC:
                 return None
-            case keys.ENTER:
+            case key.ENTER:
                 print()
                 return ''.join(chars)
-            case keys.BACKSPACE:
+            case key.BACKSPACE:
                 if chars:
                     chars.pop()
                     print('\b \b',
@@ -47,8 +47,9 @@ def keyboard_event_input(placeholder: str = ">") -> str | None:
                           flush = True)
                     continue
             case _:
-                chars.append(var)
-                print(var,
-                      end = '',
-                      flush = True)
+                if len(var) == 1 and var.isprintable():
+                    chars.append(var)
+                    print(var,
+                          end = '',
+                          flush = True)
                 continue

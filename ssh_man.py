@@ -893,7 +893,7 @@ def print_clients(key: str | None) -> None:
                                      ["Exit (CTRL+C)", "Exits SSH Manager"]]
     commands_table: str = tabulate(command_data,
                                     headers = ["Command",
-                                                "Description"])
+                                               "Description"])
     grid: list[list[str]] = [[ssh_table,
                                 commands_table]]
     print(tabulate(grid,
